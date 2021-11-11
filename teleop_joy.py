@@ -15,8 +15,6 @@ SteeringPin = [27, 18]  # DIR(Ph13), PWM(Ph12)
 FreqHT = 1000
 SteeringFreq = 20000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 
-before = None
-
 pi = pigpio.pi()
 spi = spidev.SpiDev()
 spi.open(0, 0)  # bus0, CE0
@@ -111,7 +109,7 @@ class ROS:
         # axes [左x, 左y, 右x, 右y, +字x, +字y]
         # -> [左y, 右x]
         joy = [raw.axes[1] if raw.axes[1] > 0 else 0, int((raw.axes[2] + 1) * 170 + 260)]
-        self.ac.status = 1 if joy[0] else 0
+        self.ac.status = True if joy[0] else False
         self.s.ref = joy[1]
 
     def __on_shutdown(self):
