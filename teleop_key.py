@@ -21,7 +21,7 @@ Control Car!
 Moving around:
         w
    a    s    d
-   
+
 space key, s : force stop
 CTRL-C to quit
 """

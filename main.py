@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import sys
 import threading
 import time
 
@@ -12,7 +13,7 @@ ThPins = [22, 23]  # Main(Ph15), Sub(Ph16)
 SteeringPin = [27, 18]  # DIR(Ph13), PWM(Ph12)
 
 FreqHT = 1000
-SteeringFreq = 20000  # Hzを上げると音が聞きづらくなるが、熱を持つ
+SteeringFreq = 30000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 
 pi = pigpio.pi()
 spi = spidev.SpiDev()
@@ -68,9 +69,9 @@ class Steering(threading.Thread):
     def run(self):
         while not self.kill:
             pi.write(SteeringPin[0], self.ref < steering_ang(0))
-            if self.ref - 5 < steering_ang(0) < self.ref + 5:
+            if self.ref - 10 < steering_ang(0) < self.ref + 10:
                 pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(0))
-            elif self.ref - 10 < steering_ang(0) < self.ref + 10:
+            elif self.ref - 20 < steering_ang(0) < self.ref + 20:
                 pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(20))
             else:
                 pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(40))
@@ -138,6 +139,7 @@ if __name__ == '__main__':
                 stats = a.getTwist()
                 ac.status = stats[0] > 0
                 s.ref = stats[1]
+                print ac.status, s.ref, steering_ang(0)
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass

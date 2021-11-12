@@ -13,7 +13,7 @@ from sensor_msgs.msg import Joy
 ThPins = [22, 23]  # Main(Ph15), Sub(Ph16)
 SteeringPin = [27, 18]  # DIR(Ph13), PWM(Ph12)
 FreqHT = 1000
-SteeringFreq = 20000  # Hzを上げると音が聞きづらくなるが、熱を持つ
+SteeringFreq = 30000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 
 pi = pigpio.pi()
 spi = spidev.SpiDev()
@@ -56,6 +56,9 @@ class Accelerator(threading.Thread):
                 pi.set_PWM_dutycycle(ThPins[0], 70 * 2.55)  # 70% -> 約4.5v
                 pi.set_PWM_dutycycle(ThPins[1], 5 * 2.55)  # 5% -> 約0.5v
             time.sleep(0.01)
+        pi.set_PWM_dutycycle(ThPins[0], 5 * 2.55)  # 5% -> 約0.5v
+        pi.set_PWM_dutycycle(ThPins[1], 70 * 2.55)  # 70% -> 約4.5v
+
 
 
 class Steering(threading.Thread):
@@ -71,11 +74,12 @@ class Steering(threading.Thread):
             if self.ref - 5 < steering_ang(0) < self.ref + 5:
                 pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(0))
             elif self.ref - 10 < steering_ang(0) < self.ref + 10:
-                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(20))
+                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(13))
             else:
-                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(40))
+                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(17))
 
             time.sleep(0.1)
+        pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(0))
 
 
 def terminate():
@@ -91,10 +95,6 @@ def terminate():
         pi.stop()
 
 
-def convert(x, in_min, in_max, out_min, out_max):
-    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-
-
 class ROS:
     def __init__(self):
         self.s = Steering()
@@ -108,7 +108,8 @@ class ROS:
     def __callback(self, raw):
         # axes [左x, 左y, 右x, 右y, +字x, +字y]
         # -> [左y, 右x]
-        joy = [raw.axes[1] if raw.axes[1] > 0 else 0, int((raw.axes[2] + 1) * 170 + 260)]
+        joy = [raw.axes[1] if raw.axes[1] > 0 else 0, int(((raw.axes[2] + 1) * (260 - 600) / 2) + 600)]
+        print steering_ang(0), self.ac.status, self.s.ref
         self.ac.status = True if joy[0] else False
         self.s.ref = joy[1]
 
