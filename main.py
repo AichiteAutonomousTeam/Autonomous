@@ -11,20 +11,22 @@ from geometry_msgs.msg import TwistStamped
 
 ThPins = [22, 23]  # Main(Ph15), Sub(Ph16)
 SteeringPin = [27, 18]  # DIR(Ph13), PWM(Ph12)
+SonicPin = [5, 6]  # Trigger, Echo
 
 FreqHT = 1000
 SteeringFreq = 30000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 
 pi = pigpio.pi()
 spi = spidev.SpiDev()
+spi.open(0, 0)  # bus0, CE0
+spi.max_speed_hz = 1000000  # 1MHz
+pi.set_mode(SonicPin[0], pigpio.OUTPUT)
+pi.set_mode(SonicPin[1], pigpio.INPUT)
 for p in range(2):
     pi.set_mode(ThPins[p], pigpio.OUTPUT)
     pi.set_mode(SteeringPin[p], pigpio.OUTPUT)
     pi.set_PWM_frequency(SteeringPin[p], FreqHT)
     pi.set_PWM_range(SteeringPin[p], 255)
-
-spi.open(0, 0)  # bus0, CE0
-spi.max_speed_hz = 1000000  # 1MHz
 
 
 def steering_ang(num):
@@ -37,8 +39,51 @@ def steering_ang(num):
     return int((ret[0] & 0x3) << 8 | ret[1])
 
 
+def get_distance():
+    pi.write(TRIG, 1)
+    time.sleep(0.00001)
+    pi.write(TRIG, 0)
+
+    StartTime = time.time()
+    StopTime = time.time()
+
+    while not pi.read(ECHO):
+        StartTime = time.time()
+
+    while pi.read(ECHO):
+        StopTime = time.time()
+
+    TimeElapsed = StopTime - StartTime
+    distance = (TimeElapsed * 34300) / 2
+    return distance
+
+
 def duty_to_percent(duty):
     return int(duty * 1000000 / 100.)
+
+
+class Sonic(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.setDaemon(True)
+        self.distance = 2000
+        self.kill = False
+
+    def run(self):
+        while not self.kill:
+            pi.write(TRIG, 1)
+            time.sleep(0.00001)
+            pi.write(TRIG, 0)
+            StartTime = time.time()
+            StopTime = time.time()
+
+            while not pi.read(ECHO):
+                StartTime = time.time()
+            while pi.read(ECHO):
+                StopTime = time.time()
+
+            TimeElapsed = StopTime - StartTime
+            self.distance = (TimeElapsed * 34300) / 2
 
 
 class Accelerator(threading.Thread):
@@ -72,9 +117,9 @@ class Steering(threading.Thread):
             if self.ref - 10 < steering_ang(0) < self.ref + 10:
                 pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(0))
             elif self.ref - 20 < steering_ang(0) < self.ref + 20:
-                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(20))
+                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(13))
             else:
-                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(40))
+                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(17))
 
             time.sleep(0.1)
 
@@ -129,20 +174,22 @@ if __name__ == '__main__':
     except Exception:
         sys.exit()
     else:
-        s = Steering()
+        sn = Sonic()
+        st = Steering()
         ac = Accelerator()
-        s.start()
+        sn.start()
+        st.start()
         ac.start()
         try:
             a = Autoware()
             while not rospy.is_shutdown():
                 stats = a.getTwist()
-                ac.status = stats[0] > 0
-                s.ref = stats[1]
-                print ac.status, s.ref, steering_ang(0)
+                ac.status = (stats[0] > 0) if sn.distance > 100 else False
+                st.ref = stats[1]
+                print ac.status, st.ref, steering_ang(0)
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass
-        s.kill = True
+        st.kill = True
         ac.kill = True
     terminate()
