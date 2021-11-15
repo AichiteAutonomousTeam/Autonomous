@@ -8,6 +8,7 @@ import pigpio
 import rospy
 import spidev
 from geometry_msgs.msg import TwistStamped
+from std_msgs.msg import Bool
 
 ThPins = [22, 23]  # Main(Ph15), Sub(Ph16)
 SteeringPin = [27, 18]  # DIR(Ph13), PWM(Ph12)
@@ -39,25 +40,6 @@ def steering_ang(num):
     return int((ret[0] & 0x3) << 8 | ret[1])
 
 
-def get_distance():
-    pi.write(TRIG, 1)
-    time.sleep(0.00001)
-    pi.write(TRIG, 0)
-
-    StartTime = time.time()
-    StopTime = time.time()
-
-    while not pi.read(ECHO):
-        StartTime = time.time()
-
-    while pi.read(ECHO):
-        StopTime = time.time()
-
-    TimeElapsed = StopTime - StartTime
-    distance = (TimeElapsed * 34300) / 2
-    return distance
-
-
 def duty_to_percent(duty):
     return int(duty * 1000000 / 100.)
 
@@ -71,15 +53,15 @@ class Sonic(threading.Thread):
 
     def run(self):
         while not self.kill:
-            pi.write(TRIG, 1)
+            pi.write(SonicPin[0], 1)
             time.sleep(0.00001)
-            pi.write(TRIG, 0)
+            pi.write(SonicPin[0], 0)
             StartTime = time.time()
             StopTime = time.time()
 
-            while not pi.read(ECHO):
+            while not pi.read(SonicPin[1]):
                 StartTime = time.time()
-            while pi.read(ECHO):
+            while pi.read(SonicPin[1]):
                 StopTime = time.time()
 
             TimeElapsed = StopTime - StartTime
@@ -137,6 +119,30 @@ def terminate():
         pi.stop()
 
 
+class WhiteLine(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.setDaemon(True)
+        self.kill = False
+        self.subscriber = rospy.Subscriber('/detect_whiteline', Bool, self.__line)
+        self.count_timer = [0, 0]
+        self.detected = False
+    
+    def run(self):
+        while not self.kill:
+            if self.count_timer[1] >= 3:
+                self.detected = True
+            if time.time() - self.count_timer[1] > 5:
+                 self.count_timer = [0, 0]
+                 self.detected = False
+    
+    def __line(self, _):
+        if self.count_timer:
+            self.count_timer[1] = time.time()
+        else:
+            self.count_timer[0] += 1
+
+
 class Autoware:
     def __init__(self):
         self.twist = {}
@@ -144,28 +150,26 @@ class Autoware:
         self.ad = 430
         rospy.init_node('Car')  # , log_level=rospy.DEBUG
         rospy.on_shutdown(self.__on_shutdown)
-        self.subscriber = rospy.Subscriber('/twist_cmd', TwistStamped, self.__callback)
-        # self.subscriber = rospy.Subscriber('/cmd_vel', Twist, self.__callback)
+        self.subscriber = rospy.Subscriber('/twist_cmd', TwistStamped, self.__twist)
 
-    def __callback(self, raw):
+    def __twist(self, raw):
         twist = {"speed": raw.twist.linear.x, "ang": raw.twist.angular.z}  # speed: m/s, angular: radian/s
-        # self.twist = {"speed": raw.linear.x, "ang": raw.angular.z}  # speed: m/s, angular: radian/s
         # angular: 右カーブ -> マイナス
         #          左カーブ -> プラス
         rospy.logdebug("Autoware > %s" % self.twist)
         radius = (twist["speed"] / twist["ang"]) if twist["ang"] else 1  # 回転半径
-        if abs(radius) < 20:
+        if abs(radius) < 15:
             self.ad = 260 if radius > 0 else 600
         else:
             self.ad = 430  # 中心
         self.speed = twist["speed"]
 
+    def getTwist(self):
+        return self.speed, self.ad
+
     def __on_shutdown(self):
         rospy.loginfo("shutdown!")
         self.subscriber.unregister()
-
-    def getTwist(self):
-        return self.speed, self.ad
 
 
 if __name__ == '__main__':
@@ -177,16 +181,18 @@ if __name__ == '__main__':
         sn = Sonic()
         st = Steering()
         ac = Accelerator()
+        wl = WhiteLine()
         sn.start()
         st.start()
         ac.start()
+        wl.start()
         try:
             a = Autoware()
             while not rospy.is_shutdown():
                 stats = a.getTwist()
-                ac.status = (stats[0] > 0) if sn.distance > 100 else False
+                ac.status = (stats[0] > 0) if sn.distance > 300 else False
                 st.ref = stats[1]
-                print ac.status, st.ref, steering_ang(0)
+                print ac.status, st.ref, steering_ang(0), sn.distance, wl.detected
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass
