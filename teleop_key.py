@@ -107,9 +107,9 @@ class Steering(threading.Thread):
             if self.ref - 5 < steering_ang(0) < self.ref + 5:
                 pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(0))
             elif self.ref - 10 < steering_ang(0) < self.ref + 10:
-                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(20))
+                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(13))
             else:
-                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(40))
+                pi.hardware_PWM(SteeringPin[1], SteeringFreq, duty_to_percent(17))
 
             time.sleep(0.1)
 

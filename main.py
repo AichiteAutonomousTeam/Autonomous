@@ -13,21 +13,22 @@ from std_msgs.msg import Bool
 ThPins = [22, 23]  # Main(Ph15), Sub(Ph16)
 SteeringPin = [27, 18]  # DIR(Ph13), PWM(Ph12)
 SonicPin = [5, 6]  # Trigger, Echo
+ReceivePin = 15
 
 FreqHT = 1000
 SteeringFreq = 30000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 
 pi = pigpio.pi()
-spi = spidev.SpiDev()
-spi.open(0, 0)  # bus0, CE0
-spi.max_speed_hz = 1000000  # 1MHz
-pi.set_mode(SonicPin[0], pigpio.OUTPUT)
-pi.set_mode(SonicPin[1], pigpio.INPUT)
+pi.set_mode(15, pigpio.INPUT)
 for p in range(2):
     pi.set_mode(ThPins[p], pigpio.OUTPUT)
     pi.set_mode(SteeringPin[p], pigpio.OUTPUT)
     pi.set_PWM_frequency(SteeringPin[p], FreqHT)
     pi.set_PWM_range(SteeringPin[p], 255)
+
+spi = spidev.SpiDev()
+spi.open(0, 0)  # bus0, CE0
+spi.max_speed_hz = 1000000  # 1MHz
 
 
 def steering_ang(num):
@@ -48,24 +49,13 @@ class Sonic(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.setDaemon(True)
-        self.distance = 2000
+        self.flag = False
         self.kill = False
 
     def run(self):
         while not self.kill:
-            pi.write(SonicPin[0], 1)
-            time.sleep(0.00001)
-            pi.write(SonicPin[0], 0)
-            StartTime = time.time()
-            StopTime = time.time()
-
-            while not pi.read(SonicPin[1]):
-                StartTime = time.time()
-            while pi.read(SonicPin[1]):
-                StopTime = time.time()
-
-            TimeElapsed = StopTime - StartTime
-            self.distance = (TimeElapsed * 34300) / 2
+            self.flag = pi.read(ReceivePin)
+            time.sleep(0.01)
 
 
 class Accelerator(threading.Thread):
@@ -125,17 +115,17 @@ class WhiteLine(threading.Thread):
         self.setDaemon(True)
         self.kill = False
         self.subscriber = rospy.Subscriber('/detect_whiteline', Bool, self.__line)
-        self.count_timer = [0, 0]
+        self.count_timer = [0, 0.]
         self.detected = False
-    
+
     def run(self):
         while not self.kill:
             if self.count_timer[1] >= 3:
                 self.detected = True
             if time.time() - self.count_timer[1] > 5:
-                 self.count_timer = [0, 0]
-                 self.detected = False
-    
+                self.count_timer = [0, 0.]
+                self.detected = False
+
     def __line(self, _):
         if self.count_timer:
             self.count_timer[1] = time.time()
@@ -176,26 +166,21 @@ if __name__ == '__main__':
     try:
         rospy.get_published_topics()  # ros masterが立っていることを確認
     except Exception:
+        print "ROSCOREが見つかりません"
         sys.exit()
     else:
-        sn = Sonic()
-        st = Steering()
-        ac = Accelerator()
-        wl = WhiteLine()
-        sn.start()
-        st.start()
-        ac.start()
-        wl.start()
+        sn, st, ac, wl = Sonic(), Steering(), Accelerator(), WhiteLine()
+        sn.start(), st.start(), ac.start(), wl.start()
+
         try:
             a = Autoware()
             while not rospy.is_shutdown():
                 stats = a.getTwist()
-                ac.status = (stats[0] > 0) if sn.distance > 300 else False
+                ac.status = (stats[0] > 0) if sn.flag else False
                 st.ref = stats[1]
-                print ac.status, st.ref, steering_ang(0), sn.distance, wl.detected
+                print sn.flag
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass
-        st.kill = True
-        ac.kill = True
+        sn.kill, st.kill, ac.kill, wl.kill = True, True, True, True
     terminate()
