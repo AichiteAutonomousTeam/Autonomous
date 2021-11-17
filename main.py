@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import subprocess
 import sys
 import threading
 import time
@@ -169,6 +170,7 @@ if __name__ == '__main__':
         print "ROSCOREが見つかりません"
         sys.exit()
     else:
+        subprocess.Popen("python /home/ubuntu/catkin_ws/src/Script/src/get_sonic.py".split())
         sn, st, ac, wl = Sonic(), Steering(), Accelerator(), WhiteLine()
         sn.start(), st.start(), ac.start(), wl.start()
 

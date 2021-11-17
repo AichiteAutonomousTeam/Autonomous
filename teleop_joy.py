@@ -126,7 +126,7 @@ if __name__ == '__main__':
     except Exception:
         sys.exit()
     else:
-        subprocess.Popen("rosrun joy joy_node".split())
+        subprocess.Popen("rosrun joy joy_node", shell=True)
         try:
             r = ROS()
             print "running"

@@ -11,8 +11,11 @@ pi.set_mode(SonicPin[0], pigpio.OUTPUT)
 pi.set_mode(SonicPin[1], pigpio.INPUT)
 pi.set_mode(SendPin, pigpio.OUTPUT)
 pi.write(SendPin, 0)
+
+
 if __name__ == '__main__':
     try:
+        print "Sonic Ready"
         while True:
             pi.write(SonicPin[0], 1)
             time.sleep(0.00001)
