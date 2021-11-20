@@ -19,8 +19,14 @@ ReceivePin = 15
 FreqHT = 1000
 SteeringFreq = 30000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 
+dst_min = 150.
+dst_max = 300.
+dst_gap = 15.
+
 pi = pigpio.pi()
 pi.set_mode(15, pigpio.INPUT)
+max_sec = dst_max/sonic_speed*2
+
 for p in range(2):
     pi.set_mode(ThPins[p], pigpio.OUTPUT)
     pi.set_mode(SteeringPin[p], pigpio.OUTPUT)
@@ -53,6 +59,25 @@ class Sonic(threading.Thread):
         self.flag = False
         self.kill = False
 
+    def read_distance(self):
+        pi.write(SonicPin[0], 1)
+        time.sleep(0.00001)W
+        pi.write(SonicPin[0], 0)
+        StartTime = time.time()
+        StopTime = time.time()
+        while pi.read(SonicPin[1]) == 0:
+            StartTime = time.time()
+        while pi.read(SonicPin[1]) == 1 and(time.time() - StartTime) < max_sec:
+            StopTime = time.time()
+        TimeElapsed = StopTime - StartTime
+        distance = (TimeElapsed * 34300) / 2
+        if distance < dst_min:
+            distance = dst_min
+        # print("---dst---")
+        # print(distance)
+        return distance
+
+
     def run(self):
         cnt = 0
         while not self.kill:
@@ -62,6 +87,7 @@ class Sonic(threading.Thread):
                self.flag = True
                time.sleep(3)
                self.flag = False
+               print 1
             time.sleep(0.01)
 
 
@@ -185,7 +211,7 @@ if __name__ == '__main__':
             while not rospy.is_shutdown():
                 stats = a.getTwist()
                 if not sn.flag:
-                    ac.status = (stats[0] > 0)
+                    ac.status = (stats[0] > 0) 
                 else:
                      ac.status = False
                 st.ref = stats[1]

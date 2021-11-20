@@ -5,6 +5,9 @@ import time
 SonicPin = [5, 6]
 SendPin = 14
 
+dst_max = 200.
+max_sec = dst_max / 34300 * 2
+
 pi = pigpio.pi()
 
 pi.set_mode(SonicPin[0], pigpio.OUTPUT)
@@ -23,18 +26,19 @@ if __name__ == '__main__':
             StartTime = time.time()
             StopTime = time.time()
 
-            while not pi.read(SonicPin[1]):
+            while not pi.read(SonicPin[1]) and (time.time() - StartTime) <= max_sec:
                 StartTime = time.time()
-            while pi.read(SonicPin[1]) and time.time() - StartTime <= 1:
+            while pi.read(SonicPin[1]) and (time.time() - StartTime) <= max_sec:
                 StopTime = time.time()
 
             distance = ((StopTime - StartTime) * 34300) / 2
-            print int(distance)
-            if distance < 50:
+            distance = distance if distance > 0 else 0
+            if distance < 100:
+                print 1
                 pi.write(SendPin, 1)
             else:
+                print 0
                 pi.write(SendPin, 0)
-            time.sleep(0.01)
     except KeyboardInterrupt:
         pass
     pi.write(SendPin, 0)

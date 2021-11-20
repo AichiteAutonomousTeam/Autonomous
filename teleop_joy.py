@@ -12,6 +12,7 @@ from sensor_msgs.msg import Joy
 
 ThPins = [22, 23]  # Main(Ph15), Sub(Ph16)
 SteeringPin = [27, 18]  # DIR(Ph13), PWM(Ph12)
+ReceivePin = 15
 FreqHT = 1000
 SteeringFreq = 30000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 
@@ -24,6 +25,9 @@ for p in range(2):
     pi.set_mode(SteeringPin[p], pigpio.OUTPUT)
     pi.set_PWM_frequency(SteeringPin[p], FreqHT)
     pi.set_PWM_range(SteeringPin[p], 255)
+pi.set_mode(ReceivePin, pigpio.INPUT)
+pi.set_pull_up_down(ReceivePin, pigpio.PUD_DOWN)
+
 
 
 def steering_ang(num):
@@ -38,6 +42,26 @@ def steering_ang(num):
 
 def duty_to_percent(duty):
     return int(duty * 1000000 / 100.)
+
+
+class Sonic(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.setDaemon(True)
+        self.flag = False
+        self.kill = False
+
+    def run(self):
+        cnt = 0
+        while not self.kill:
+            receive = pi.read(ReceivePin)
+            print receive
+            cnt = (cnt + 1) if receive else 0
+            if receive and cnt >= 3:
+               self.flag = True
+               time.sleep(3)
+               self.flag = False
+            time.sleep(0.03)
 
 
 class Accelerator(threading.Thread):
@@ -97,10 +121,7 @@ def terminate():
 
 class ROS:
     def __init__(self):
-        self.s = Steering()
-        self.ac = Accelerator()
-        self.s.start()
-        self.ac.start()
+        self.joy = [False, 430]
         rospy.init_node('joystick')  # , log_level=rospy.DEBUG
         rospy.on_shutdown(self.__on_shutdown)
         self.subscriber = rospy.Subscriber('/joy', Joy, self.__callback)
@@ -108,14 +129,12 @@ class ROS:
     def __callback(self, raw):
         # axes [左x, 左y, 右x, 右y, +字x, +字y]
         # -> [左y, 右x]
-        joy = [raw.axes[1] if raw.axes[1] > 0 else 0, int(((raw.axes[2] + 1) * (260 - 600) / 2) + 600)]
-        print steering_ang(0), self.ac.status, self.s.ref
-        self.ac.status = True if joy[0] else False
-        self.s.ref = joy[1]
+        self.joy = [raw.axes[1] if raw.axes[1] > 0 else 0, int(((raw.axes[2] + 1) * (260 - 600) / 2) + 600)]
+
+    def get_twist(self):
+        return self.joy
 
     def __on_shutdown(self):
-        self.s.kill = True
-        self.ac.kill = True
         rospy.loginfo("shutdown!")
         self.subscriber.unregister()
 
@@ -124,14 +143,26 @@ if __name__ == '__main__':
     try:
         rospy.get_published_topics()  # ros masterが立っていることを確認
     except Exception:
+        print "ROSCOREが見つかりません"
         sys.exit()
     else:
         subprocess.Popen("rosrun joy joy_node", shell=True)
+        sn, st, ac = Sonic(), Steering(), Accelerator()
+        sn.start(), st.start(), ac.start()
         try:
             r = ROS()
             print "running"
             while not rospy.is_shutdown():
+                status = r.get_twist()
+                if not sn.flag:
+                    ac.status = True if status[0] else False
+                else:
+                    ac.status = False
+                st.ref = status[1]
+                # print steering_ang(0), ac.status, st.ref, sn.flag
+
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass
+        sn.kill, st.kill, ac.kill = True, True, True
     terminate()
