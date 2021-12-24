@@ -26,7 +26,6 @@ for p in range(2):
     pi.set_PWM_frequency(SteeringPin[p], FreqHT)
     pi.set_PWM_range(SteeringPin[p], 255)
 pi.set_mode(ReceivePin, pigpio.INPUT)
-pi.set_pull_up_down(ReceivePin, pigpio.PUD_DOWN)
 
 
 
@@ -42,26 +41,6 @@ def steering_ang(num):
 
 def duty_to_percent(duty):
     return int(duty * 1000000 / 100.)
-
-
-class Sonic(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.setDaemon(True)
-        self.flag = False
-        self.kill = False
-
-    def run(self):
-        cnt = 0
-        while not self.kill:
-            receive = pi.read(ReceivePin)
-            print receive
-            cnt = (cnt + 1) if receive else 0
-            if receive and cnt >= 3:
-               self.flag = True
-               time.sleep(3)
-               self.flag = False
-            time.sleep(0.03)
 
 
 class Accelerator(threading.Thread):
@@ -146,23 +125,21 @@ if __name__ == '__main__':
         print "ROSCOREが見つかりません"
         sys.exit()
     else:
-        subprocess.Popen("rosrun joy joy_node", shell=True)
-        sn, st, ac = Sonic(), Steering(), Accelerator()
-        sn.start(), st.start(), ac.start()
+        pro = subprocess.Popen("rosrun joy joy_node", shell=True)
+        st, ac = Steering(), Accelerator()
+        st.start(), ac.start()
         try:
             r = ROS()
             print "running"
             while not rospy.is_shutdown():
                 status = r.get_twist()
-                if not sn.flag:
-                    ac.status = True if status[0] else False
-                else:
-                    ac.status = False
+                ac.status = True if status[0] else False
                 st.ref = status[1]
-                # print steering_ang(0), ac.status, st.ref, sn.flag
+                print steering_ang(0), ac.status, st.ref
 
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass
-        sn.kill, st.kill, ac.kill = True, True, True
+        st.kill, ac.kill = True, True
+        pro.kill()
     terminate()
