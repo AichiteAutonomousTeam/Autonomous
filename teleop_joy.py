@@ -135,7 +135,7 @@ if __name__ == '__main__':
                 status = r.get_twist()
                 ac.status = True if status[0] else False
                 st.ref = status[1]
-                print steering_ang(0), ac.status, st.ref
+                # print steering_ang(0), ac.status, st.ref
 
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):

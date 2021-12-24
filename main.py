@@ -1,20 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import pigpio
+import rospy
+import spidev
 import subprocess
 import sys
 import threading
 import time
-
-import pigpio
-import rospy
-import spidev
 from geometry_msgs.msg import TwistStamped
-from std_msgs.msg import Bool
 from logging import getLogger, StreamHandler, INFO, DEBUG
+from sensor_msgs.msg import Joy
+from std_msgs.msg import Bool
+
 logger = getLogger(__name__)
 handler = StreamHandler()
-handler.setLevel(DEBUG)
-logger.setLevel(DEBUG)
+handler.setLevel(DEBUG)  # INFO
+logger.setLevel(DEBUG)  # INFO
 logger.addHandler(handler)
 logger.propagate = False
 
@@ -169,23 +170,44 @@ def terminate():
         pi.stop()
 
 
-class WhiteLine(threading.Thread):
-    """
-    1回目の白線検出時から5秒以内に3回検出できれば停止/5秒以上でリセット
-    """
-
+class JOY:
     def __init__(self):
-        threading.Thread.__init__(self)
-        self.setDaemon(True)
-        self.count_timer = [0, 0.]  # [回数, 時間]
-        self.detected = False  # 検出したか
-        self.kill = False
+        self.joy = False
 
-        self.subscriber = rospy.Subscriber('/detect_whiteline', Bool, self.__line)  # detect_whitelineをサブスクライブ
+        self.pro = subprocess.Popen("rosrun joy joy_node", shell=True)
+        self.subscriber = rospy.Subscriber('/joy', Joy, self.__callback)
         rospy.on_shutdown(self.subscriber.unregister)
 
-    def __line(self, _):  # detect_whitelineがTrueを返したとき
-        self.detected = False
+    def __callback(self, raw):
+        self.joy = raw.buttons[3]  # ボタン右
+
+    def get_twist(self):
+        return self.joy
+
+    def __shutdown(self):
+        self.subscriber.unregister()
+        self.pro.kill()
+
+
+class WhiteLine:
+    def __init__(self):
+        self.detect = False
+        self.cnt = 0
+
+        self.subscriber = rospy.Subscriber('/detect_whiteline', Bool, self.__callback)
+        rospy.on_shutdown(self.subscriber.unregister)
+
+    def __callback(self, raw):
+        self.detect = raw.data
+        if raw.data:
+            self.cnt += 1
+
+    def get_detect(self):
+        return self.detect
+
+    def get_cnt(self):
+        return self.cnt
+
 
 class Autoware:
     def __init__(self):
@@ -203,12 +225,16 @@ class Autoware:
         radius = (twist["speed"] / twist["ang"]) if twist["ang"] else 1  # 回転半径
         if abs(radius) < 15:  # 回転半径か15以上でステアを動かす
             self.ad = 260 if radius > 0 else 600
+            # if radius > 0:
+            #     self.ad = 260
+            # else
+            #     self.ad = 600
         else:
             self.ad = 430  # 中心
         self.speed = twist["speed"]
 
-    def getTwist(self):
-#        logger.debug('twist: {}, {}'.format(self.speed, self.ad))
+    def get_twist(self):
+        # logger.debug('twist: {}, {}'.format(self.speed, self.ad))
         return self.speed, self.ad
 
 
@@ -221,24 +247,29 @@ if __name__ == '__main__':
     else:
         rospy.init_node('Car')  # , log_level=rospy.DEBUG
         sn, st, ac = Sonic(), Steering(), Accelerator()
-        # wl = WhiteLine()
         sn.start(), st.start(), ac.start()
-        # wl.start()
         try:
+            detected = False
             a = Autoware()
+            w = WhiteLine()
+            j = JOY()
             while not rospy.is_shutdown():  # ctrl+Cやエラーがでるまでループ
-                stats = a.getTwist()  # twist_cmdで処理したデータを取得
-                if not sn.flag:  # 超音波センサの検知なし
-                    ac.status = (stats[0] > 0)  # 速度が0より上で発進
-                else:
-                    ac.status = False  # 超音波センサの検知で停止
+                stats = a.get_twist()  # twist_cmdで処理したデータを取得
+                ac.status = not sn.flag and (stats[0] > 0)  # 超音波センサの検知なし and 速度が0より上で発進
                 st.ref = stats[1]  # 目標舵角を設定
-                #if wl.detected:  # 白線検知したら
-                #    while joystick_sw:  # joystickのスイッチが押されるまで待機
-                #        pass
+                if not w.get_detect() or detected:  # 白線検知したら
+                    logger.info('WL: Detected')
+                    detected = True  # 白線発見フラグ
+                    ac.status = False  # 停止
+                    if j.get_twist():  # joystickのスイッチが押されたか
+                        timer = time.time()
+                        ac.status = not sn.flag and (stats[0] > 0)  # 超音波センサの検知なし and 速度が0より上で発進
+                        while time.time() - timer < 2:  # 2秒前進
+                            pass
+                        detected = False  # 白線発見フラグを下げる
+                        print('WL: END')
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass
         sn.kill, st.kill, ac.kill = True, True, True
-        # wl.kill = True
     terminate()
