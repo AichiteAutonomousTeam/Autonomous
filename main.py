@@ -125,6 +125,7 @@ class Accelerator(threading.Thread):
     def run(self):
         while not self.kill:
             # メインとサブが入れ替わった場合notを逆にする
+            print(self.status)
             if not self.status:  # 発進
                 pi.set_PWM_dutycycle(ThPins[0], 5 * 2.55)  # 5% -> 約0.5v
                 pi.set_PWM_dutycycle(ThPins[1], 70 * 2.55)  # 70% -> 約4.5v
@@ -170,7 +171,7 @@ def terminate():
         pi.stop()
 
 
-class JOY:
+class JoyButton:
     def __init__(self):
         self.joy = False
 
@@ -181,7 +182,7 @@ class JOY:
     def __callback(self, raw):
         self.joy = raw.buttons[3]  # ボタン右
 
-    def get_twist(self):
+    def get_button(self):
         return self.joy
 
     def __shutdown(self):
@@ -249,25 +250,27 @@ if __name__ == '__main__':
         sn, st, ac = Sonic(), Steering(), Accelerator()
         sn.start(), st.start(), ac.start()
         try:
-            detected = False
+            detected = False  # 白線発見フラグ
+            white_flag = True  # 白線検出動作時フラグ
+            timer = time.time() # 白線検出動作時間
             a = Autoware()
             w = WhiteLine()
-            j = JOY()
+            j = JoyButton()
             while not rospy.is_shutdown():  # ctrl+Cやエラーがでるまでループ
                 stats = a.get_twist()  # twist_cmdで処理したデータを取得
                 ac.status = not sn.flag and (stats[0] > 0)  # 超音波センサの検知なし and 速度が0より上で発進
                 st.ref = stats[1]  # 目標舵角を設定
-                if not w.get_detect() or detected:  # 白線検知したら
+                if (w.get_detect() or detected) and white_flag:  # 白線検知したら
                     logger.info('WL: Detected')
-                    detected = True  # 白線発見フラグ
+                    detected = True
                     ac.status = False  # 停止
-                    if j.get_twist():  # joystickのスイッチが押されたか
+                    if j.get_button():  # joystickのスイッチが押されたか
                         timer = time.time()
-                        ac.status = not sn.flag and (stats[0] > 0)  # 超音波センサの検知なし and 速度が0より上で発進
-                        while time.time() - timer < 2:  # 2秒前進
-                            pass
                         detected = False  # 白線発見フラグを下げる
-                        print('WL: END')
+                        white_flag = False
+                if time.time() - timer > 2 and not white_flag:
+                    white_flag = True
+                    logger.info('WL: END')
                 rospy.sleep(0.01)
         except (rospy.ROSInterruptException, KeyboardInterrupt):
             pass
