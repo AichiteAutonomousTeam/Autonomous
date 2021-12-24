@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+
 from geometry_msgs.msg import TwistStamped
 from logging import getLogger, StreamHandler, INFO, DEBUG
 from sensor_msgs.msg import Joy
@@ -252,7 +253,7 @@ if __name__ == '__main__':
         try:
             detected = False  # 白線発見フラグ
             white_flag = True  # 白線検出動作時フラグ
-            timer = time.time() # 白線検出動作時間
+            timer = time.time()  # 白線検出動作時間
             a = Autoware()
             w = WhiteLine()
             j = JoyButton()
