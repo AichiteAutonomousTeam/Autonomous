@@ -3,7 +3,6 @@ import pigpio
 import time
 
 SonicPin = [5, 6]
-SendPin = 14
 
 dst_max = 200.
 max_sec = dst_max / 34300 * 2
