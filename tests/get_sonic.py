@@ -34,10 +34,10 @@ if __name__ == '__main__':
             distance = ((StopTime - StartTime) * 34300) / 2
             distance = distance if distance > 0 else 0
             if distance < 100:
-                pi.write(SendPin, 1)
+                print(True)
             else:
-                pi.write(SendPin, 0)
+                print(False)
     except KeyboardInterrupt:
         pass
-    pi.write(SendPin, 0)
+    pi.write(SonicPin[0], 0)
     pi.stop()
