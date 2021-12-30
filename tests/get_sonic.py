@@ -12,8 +12,6 @@ pi = pigpio.pi()
 
 pi.set_mode(SonicPin[0], pigpio.OUTPUT)
 pi.set_mode(SonicPin[1], pigpio.INPUT)
-pi.set_mode(SendPin, pigpio.OUTPUT)
-pi.write(SendPin, 0)
 
 
 if __name__ == '__main__':
