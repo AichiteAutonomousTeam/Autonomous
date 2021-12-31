@@ -108,7 +108,7 @@ class ROS:
     def __callback(self, raw):
         # axes [左x, 左y, 右x, 右y, +字x, +字y]
         # -> [左y, 右x]
-        self.joy = [raw.axes[1] if raw.axes[1] > 0 else 0, int(((raw.axes[2] + 1) * (260 - 600) / 2) + 600)]
+        self.joy = [raw.axes[1] if raw.axes[1] > 0 else 0, int(((raw.axes[2] + 1) * (260 - 600) / 2) + 600)]  # joystickの値をad角度に変換
 
     def get_twist(self):
         return self.joy
