@@ -258,9 +258,6 @@ if __name__ == '__main__':
             w = WhiteLine()
             j = JoyButton()
             while not rospy.is_shutdown():  # ctrl+Cやエラーがでるまでループ
-                stats = a.get_twist()  # twist_cmdで処理したデータを取得
-                ac.status = not sn.flag and (stats[0] > 0)  # 超音波センサの検知なし and 速度が0より上で発進
-                st.ref = stats[1]  # 目標舵角を設定
                 if (w.get_detect() or detected) and white_flag:  # 白線検知したら
                     logger.info('WL: Detected')
                     detected = True
@@ -269,6 +266,11 @@ if __name__ == '__main__':
                         timer = time.time()
                         detected = False  # 白線発見フラグを下げる
                         white_flag = False
+                else:
+                    stats = a.get_twist()  # twist_cmdで処理したデータを取得
+                    ac.status = not sn.flag and (stats[0] > 0)  # 超音波センサの検知なし and 速度が0より上で発進
+                    st.ref = stats[1]  # 目標舵角を設定
+                
                 if time.time() - timer > 2 and not white_flag:
                     white_flag = True
                     logger.info('WL: END')
