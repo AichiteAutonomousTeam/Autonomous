@@ -194,21 +194,15 @@ class JoyButton:
 class WhiteLine:
     def __init__(self):
         self.detect = False
-        self.cnt = 0
 
         self.subscriber = rospy.Subscriber('/detect_whiteline', Bool, self.__callback)
         rospy.on_shutdown(self.subscriber.unregister)
 
     def __callback(self, raw):
         self.detect = raw.data
-        if raw.data:
-            self.cnt += 1
 
     def get_detect(self):
         return self.detect
-
-    def get_cnt(self):
-        return self.cnt
 
 
 class Autoware:
