@@ -241,11 +241,11 @@ class Autoware:
 
 
 if __name__ == '__main__':
-    try:
-        rospy.get_published_topics()  # ros masterが立っていることを確認
-    except Exception:
-        logger.critical('ROSCORE not found')
-        sys.exit()
+    published_topics = dict(rospy.get_published_topics())  # ros masterが立っていることを確認
+    if published_topics is None:
+        logger.critical("ROSCORE not found")
+    elif "/detect_whiteline" not in published_topics.keys():
+        logger.critical('/detect_whiteline topic is not found')
     else:
         rospy.init_node('Car')  # , log_level=rospy.DEBUG
         sn, st, ac = Sonic(), Steering(), Accelerator()
