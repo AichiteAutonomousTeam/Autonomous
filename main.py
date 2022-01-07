@@ -270,7 +270,7 @@ if __name__ == '__main__':
                         white_flag = False
                 else:
                     ac.status = not sn.flag and (stats[0] > 0)  # 超音波センサの検知なし and 速度が0より上で発進
-                
+
                 if time.time() - timer > 2 and not white_flag:
                     white_flag = True
                     logger.info('WL: END')
